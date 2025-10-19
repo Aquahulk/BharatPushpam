@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { uploadImage } from '@/app/lib/cloudinary-server';
+import { revalidatePath, revalidateTag } from 'next/cache';
 
 export async function GET(
   req: NextRequest,
@@ -228,6 +229,19 @@ async function handleUpdate(
     });
 
     console.log('Product updated successfully:', product.id);
+
+    // Revalidate relevant pages and cached data on updates
+    try {
+      revalidatePath(`/en/products/${finalSlug}`);
+      revalidatePath(`/hi/products/${finalSlug}`);
+      revalidatePath(`/en/products`);
+      revalidatePath(`/hi/products`);
+      revalidatePath(`/en`);
+      revalidatePath(`/hi`);
+      revalidateTag('home-data');
+    } catch (rvErr) {
+      console.warn('Revalidation failed:', rvErr);
+    }
 
     return NextResponse.json({
       success: true,
