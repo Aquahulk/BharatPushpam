@@ -12,6 +12,7 @@ import { Reveal, Tilt, Parallax } from '@/app/components/Interactive';
 import { formatINR, paiseToRupees } from '@/app/lib/currency';
 import HoldBanner from '@/app/components/HoldBanner';
 import HeroVideoOverlay from '@/app/components/HeroVideoOverlay';
+import { DisplayAssetType } from '@prisma/client';
 
 export const revalidate = 300;
 
@@ -51,28 +52,28 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         const client = prisma;
         if (client.displayAsset) {
           hero = await client.displayAsset.findFirst({
-            where: { type: 'HERO', OR: [{ locale: loc }, { locale: null }] },
+            where: { type: DisplayAssetType.HERO, OR: [{ locale: loc }, { locale: null }] },
             orderBy: [{ order: 'asc' }, { createdAt: 'asc' }]
           });
           banners = await client.displayAsset.findMany({
             where: {
               OR: [
-                { type: 'BANNER', locale: loc },
-                { type: 'BANNER', locale: null },
-                { type: 'PROMO', locale: loc },
-                { type: 'PROMO', locale: null }
+                { type: DisplayAssetType.BANNER, locale: loc },
+                { type: DisplayAssetType.BANNER, locale: null },
+                { type: DisplayAssetType.PROMO, locale: loc },
+                { type: DisplayAssetType.PROMO, locale: null }
               ]
             },
             orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
             take: 6
           });
           freshPlants = await client.displayAsset.findMany({
-            where: { type: 'FRESH_PLANT', OR: [{ locale: loc }, { locale: null }] },
+            where: { type: DisplayAssetType.FRESH_PLANT, OR: [{ locale: loc }, { locale: null }] },
             orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
             take: 4
           });
           aboutUs = await client.displayAsset.findMany({
-            where: { type: 'ABOUT_US', OR: [{ locale: loc }, { locale: null }] },
+            where: { type: DisplayAssetType.ABOUT_US, OR: [{ locale: loc }, { locale: null }] },
             orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
             take: 3
           });
@@ -219,7 +220,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
                   <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-green-50/80" />
                   <div className="relative h-full w-full flex items-center justify-center">
                     <Image
-                      src={isPlaceholder ? getPlaceholderImage(240, 160, 'Fresh Plant') : (plant.url || (plant.publicId ? buildCloudinaryUrl(plant.publicId) : getPlaceholderImage(240, 160, 'Fresh Plant')))}
+                      src={isPlaceholder ? getPlaceholderImage(240, 160, 'Fresh Plant') : (plant.url ?? (plant.publicId ? buildCloudinaryUrl(plant.publicId) : getPlaceholderImage(240, 160, 'Fresh Plant')))}
                       alt={isPlaceholder ? "Fresh Plant" : (plant.title || "Fresh Plant")}
                       width={240}
                       height={160}

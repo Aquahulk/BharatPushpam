@@ -8,6 +8,7 @@ import { prisma } from '@/app/lib/prisma';
 import { buildCloudinaryUrl } from '@/app/lib/cloudinary-server';
 import { getSettings } from '@/app/lib/settings';
 import MobileMenu from '@/app/components/MobileMenu';
+import { DisplayAssetType } from '@prisma/client';
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
@@ -82,7 +83,7 @@ export default async function LocaleLayout({
     if (client.displayAsset) {
       const logoData = await client.displayAsset.findFirst({
         where: {
-          type: 'LOGO',
+          type: DisplayAssetType.LOGO,
           OR: [{ locale }, { locale: null }]
         },
         orderBy: [{ order: 'asc' }, { createdAt: 'asc' }]
