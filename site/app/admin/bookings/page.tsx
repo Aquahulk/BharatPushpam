@@ -28,8 +28,9 @@ function groupByDate<T extends { date: string }>(items: T[]) {
   return map;
 }
 
-export default async function AdminBookingsPage({ searchParams }: { searchParams?: { [key: string]: string | string[] | undefined } }) {
-  const qRaw = searchParams?.q;
+export default async function AdminBookingsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
+  const params = await searchParams;
+  const qRaw = params?.q;
   const query = (Array.isArray(qRaw) ? qRaw[0] : qRaw)?.toString().trim().toLowerCase() || '';
   const bookings = await prisma.serviceBooking.findMany({
     orderBy: [{ date: 'asc' }, { startMinutes: 'asc' }],

@@ -244,7 +244,7 @@ export default function PayBookingPage({ params }: { params: Promise<{ id: strin
                 </div>
               )}
             </div>
-          )
+          )}
         </div>
       ) : (
         <div>No booking found.</div>

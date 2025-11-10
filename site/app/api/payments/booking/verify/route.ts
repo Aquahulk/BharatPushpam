@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
           phone: confirmed.customerPhone || null,
           address: address,
           city: confirmed.city || 'Pune',
-          pincode: confirmed.pincode || '000000',
+          pincode: confirmed.postalCode || '000000',
           totalMrp: amountToCharge,
           totalPrice: amountToCharge,
           shippingFee: 0,
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
           paymentMethod: 'Razorpay',
           paymentDetails: JSON.stringify({
             type: 'service',
-            serviceName: confirmed.service?.name || '',
+            serviceName: booking.service?.name || '',
             date: confirmed.date,
             startMinutes: confirmed.startMinutes,
             bookingId: confirmed.id

@@ -42,8 +42,17 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
   if (order.items.length === 0 && order.paymentId) {
     bookingForOrder = await prisma.serviceBooking.findFirst({
       where: { paymentId: order.paymentId },
-      include: { service: true },
-      select: { id: true, date: true, startMinutes: true, notes: true, monthlyDay: true, type: true, planType: true, planPricePaise: true, service: true }
+      select: {
+        id: true,
+        date: true,
+        startMinutes: true,
+        notes: true,
+        monthlyDay: true,
+        type: true,
+        planType: true,
+        planPricePaise: true,
+        service: { select: { name: true } }
+      }
     });
   }
 
