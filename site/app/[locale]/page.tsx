@@ -13,6 +13,7 @@ import { formatINR, paiseToRupees } from '@/app/lib/currency';
 import HoldBanner from '@/app/components/HoldBanner';
 import HeroVideoOverlay from '@/app/components/HeroVideoOverlay';
 import { DisplayAssetType } from '@prisma/client';
+import MonthlyPlanReminder from '@/app/components/MonthlyPlanReminder';
 
 export const revalidate = 300;
 
@@ -149,6 +150,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         </div>
         <div className="max-w-6xl mx-auto px-4 py-3">
           <HoldBanner />
+          <MonthlyPlanReminder locale={locale} />
         </div>
         {/* banner background image (managed via admin if available) */}
         <Image

@@ -35,6 +35,12 @@ export default async function InvoicePage({ params }: { params: Promise<{ locale
   const taxPercent = Math.max(0, Math.floor((settings.invoice?.taxPercent ?? 0)));
   const taxAmount = Math.floor(order.totalMrp * taxPercent / 100);
 
+  // Parse payment details (for service bookings without items)
+  let paymentInfo: any = null;
+  if (order.paymentDetails) {
+    try { paymentInfo = JSON.parse(order.paymentDetails as any); } catch {}
+  }
+
   return (
     <div className="max-w-3xl mx-auto p-6 print:p-0">
       <div className="flex items-center justify-between mb-4 print:hidden">
@@ -86,14 +92,27 @@ export default async function InvoicePage({ params }: { params: Promise<{ locale
               </tr>
             </thead>
             <tbody>
-              {order.items.map(item => (
-                <tr key={item.id} className="border-b">
-                  <td className="p-2">{item.product.name}{item.variant ? ` - ${item.variant.name}` : ''}</td>
-                  <td className="p-2 text-right">{item.quantity}</td>
-                  <td className="p-2 text-right">{formatINR(paiseToRupees(item.unitPrice))}</td>
-                  <td className="p-2 text-right">{formatINR(paiseToRupees(item.unitPrice * item.quantity))}</td>
+              {order.items.length > 0 ? (
+                order.items.map(item => (
+                  <tr key={item.id} className="border-b">
+                    <td className="p-2">{item.product.name}{item.variant ? ` - ${item.variant.name}` : ''}</td>
+                    <td className="p-2 text-right">{item.quantity}</td>
+                    <td className="p-2 text-right">{formatINR(paiseToRupees(item.unitPrice))}</td>
+                    <td className="p-2 text-right">{formatINR(paiseToRupees(item.unitPrice * item.quantity))}</td>
+                  </tr>
+                ))
+              ) : paymentInfo?.type === 'service' ? (
+                <tr className="border-b">
+                  <td className="p-2">{paymentInfo.serviceName || 'Service Booking'}</td>
+                  <td className="p-2 text-right">1</td>
+                  <td className="p-2 text-right">{formatINR(paiseToRupees(order.totalMrp || order.totalPrice))}</td>
+                  <td className="p-2 text-right">{formatINR(paiseToRupees(order.totalPrice))}</td>
                 </tr>
-              ))}
+              ) : (
+                <tr>
+                  <td className="p-2 text-gray-600" colSpan={4}>No items</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

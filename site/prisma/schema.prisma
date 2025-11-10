@@ -217,6 +217,15 @@ model ServiceBooking {
   paymentId       String?
   amountPaid      Int           @default(0)
   notes           String?
+  // New fields for garden services inspection & maintenance plan
+  type            ServiceBookingType @default(MAINTENANCE)
+  inspectionCompleted Boolean        @default(false)
+  planType        MaintenancePlanType @default(NONE)
+  planPricePaise  Int                 @default(0)
+  // Monthly plan due day (1-28) when applicable
+  monthlyDay      Int?
+  // Track actual service completion separately from inspection
+  serviceCompleted Boolean            @default(false)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -229,6 +238,19 @@ model SiteSettings {
   data      Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+
+
+enum ServiceBookingType {
+  INSPECTION
+  MAINTENANCE
+}
+
+enum MaintenancePlanType {
+  NONE
+  PER_VISIT
+  MONTHLY
 }
 
 

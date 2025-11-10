@@ -42,7 +42,8 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
   if (order.items.length === 0 && order.paymentId) {
     bookingForOrder = await prisma.serviceBooking.findFirst({
       where: { paymentId: order.paymentId },
-      include: { service: true }
+      include: { service: true },
+      select: { id: true, date: true, startMinutes: true, notes: true, monthlyDay: true, type: true, planType: true, planPricePaise: true, service: true }
     });
   }
 
@@ -176,6 +177,46 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
                     {startMinutes ? <div className="text-sm text-gray-700">Start: {hh}:{mm}</div> : null}
                     {bookingId && (
                       <a href={`/admin/bookings/${bookingId}`} className="text-blue-600 hover:underline">View booking</a>
+                    )}
+                    {bookingForOrder?.planType === 'MONTHLY' && (
+                      <div className="mt-3">
+                        <div className="text-sm font-medium text-gray-600">Payment Schedule</div>
+                        {(() => {
+                          function parseFirstPaymentDate(notes: string | null | undefined): string | null {
+                            if (!notes) return null;
+                            const m = notes.match(/firstPaymentDate\s*=\s*(\d{4}-\d{2}-\d{2})/i);
+                            return m ? m[1] : null;
+                          }
+                          function nextPaymentInfo(monthlyDay: number | null | undefined) {
+                            if (!monthlyDay || monthlyDay < 1 || monthlyDay > 28) return null;
+                            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                            const [y, m, d] = todayStr.split('-').map(n => parseInt(n, 10));
+                            const targetMonth = d > monthlyDay ? m + 1 : m;
+                            const targetYear = targetMonth > 12 ? y + 1 : y;
+                            const targetMonthClamped = ((targetMonth - 1) % 12 + 12) % 12; // 0-based
+                            const targetDate = new Date(targetYear, targetMonthClamped, monthlyDay);
+                            const nextYmd = `${targetYear}-${String(targetMonthClamped + 1).padStart(2, '0')}-${String(monthlyDay).padStart(2, '0')}`;
+                            const start = new Date(y, m - 1, d);
+                            const days = Math.round((targetDate.setHours(0,0,0,0) - start.setHours(0,0,0,0)) / (1000*60*60*24));
+                            return { nextYmd, days };
+                          }
+                          const fpd = parseFirstPaymentDate(bookingForOrder?.notes || '');
+                          const md = bookingForOrder?.monthlyDay ?? null;
+                          const infoSchedule = nextPaymentInfo(md);
+                          if (!md) {
+                            return <div className="text-sm text-gray-700">Monthly day: Not scheduled yet</div>;
+                          }
+                          return (
+                            <div className="text-sm text-gray-700 space-y-0.5">
+                              <div>Monthly day: {md}</div>
+                              {fpd && <div>First payment date: {fpd}</div>}
+                              {infoSchedule && (
+                                <div>Next payment: {infoSchedule.nextYmd} {infoSchedule.days === 0 ? '(today)' : infoSchedule.days > 0 ? `(in ${infoSchedule.days} day${infoSchedule.days === 1 ? '' : 's'})` : ''}</div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
                     )}
                   </div>
                 );

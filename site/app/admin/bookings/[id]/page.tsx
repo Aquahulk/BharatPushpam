@@ -2,6 +2,7 @@ import { prisma } from '@/app/lib/prisma';
 import { formatDateTimeIST } from '@/app/lib/date';
 import { formatINR, paiseToRupees } from '@/app/lib/currency';
 import AdminBookingActions from '../AdminBookingActions';
+import AdminBookingStatusDropdown from '../AdminBookingStatusDropdown';
 
 function formatTimeLabel(minutes: number) {
   const h = Math.floor(minutes / 60);
@@ -36,7 +37,7 @@ export default async function AdminBookingDetail({ params }: { params: Promise<{
         <h1 className="text-2xl font-bold">Booking Details</h1>
         <div className="flex items-center gap-3">
           <span className={`text-xs px-2 py-1 rounded ${booking.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' : booking.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{booking.status}</span>
-          <AdminBookingActions id={booking.id} status={booking.status} />
+          <AdminBookingActions id={booking.id} status={booking.status} type={booking.type as any} inspectionCompleted={booking.inspectionCompleted} serviceCompleted={(booking as any).serviceCompleted} />
         </div>
       </div>
 
@@ -57,6 +58,19 @@ export default async function AdminBookingDetail({ params }: { params: Promise<{
           <div className="text-sm text-gray-700">Amount Paid: {formatINR(paiseToRupees(booking.amountPaid || 0))}</div>
           <div className="text-sm text-gray-700">Payment ID: {booking.paymentId || 'N/A'}</div>
           {booking.notes && <div className="text-sm text-gray-700">Notes: {booking.notes}</div>}
+          <div className="pt-2 mt-2">
+            <div className="text-sm font-medium text-gray-700 mb-1">Address</div>
+            <div className="text-sm text-gray-700 leading-snug">
+              {[booking.addressLine1, booking.addressLine2].filter(Boolean).join(', ')}
+            </div>
+            <div className="text-sm text-gray-700 leading-snug">
+              {[booking.city, booking.state, booking.postalCode].filter(Boolean).join(', ')}
+            </div>
+          </div>
+          <div className="pt-2 border-t mt-2">
+            <div className="text-sm font-medium text-gray-700 mb-1">Quick Update</div>
+            <AdminBookingStatusDropdown id={booking.id} status={booking.status as any} type={booking.type as any} inspectionCompleted={booking.inspectionCompleted} serviceCompleted={(booking as any).serviceCompleted} planType={booking.planType as any} />
+          </div>
         </div>
 
         <div className="bg-white border rounded shadow p-4 space-y-2 md:col-span-2">

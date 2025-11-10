@@ -4,8 +4,8 @@ CREATE TABLE "DisplayCategory" (
     "name" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
     "description" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL
 );
 
 -- CreateTable
@@ -20,8 +20,8 @@ CREATE TABLE "DisplayAsset" (
     "active" BOOLEAN NOT NULL DEFAULT true,
     "locale" TEXT,
     "categoryId" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL,
     CONSTRAINT "DisplayAsset_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "DisplayCategory" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 

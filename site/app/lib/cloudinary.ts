@@ -5,15 +5,21 @@ const cloudNameEnv = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const DEFAULT_CLOUD_NAME = 'dkwrsd0qc';
 const cloudName = cloudNameEnv || DEFAULT_CLOUD_NAME;
 
-export function buildCloudinaryUrl(publicId: string, width = 800, height?: number) {
+export function buildCloudinaryUrl(publicIdOrUrl: string, width = 800, height?: number) {
+  // If a full URL is provided, return it as-is. This makes the
+  // helper resilient when admins paste a direct Cloudinary URL.
+  if (/^https?:\/\//i.test(publicIdOrUrl)) {
+    return publicIdOrUrl;
+  }
+
   if (!cloudNameEnv) {
     console.warn('[cloudinary] Using default cloud name fallback');
   }
-  
+
   const transformation = height
     ? `c_fill,f_auto,q_auto:best,dpr_auto,e_sharpen:50,w_${width},h_${height}`
     : `c_fill,f_auto,q_auto:best,dpr_auto,e_sharpen:50,w_${width}`;
-  return `https://res.cloudinary.com/${cloudName}/image/upload/${transformation}/${publicId}`;
+  return `https://res.cloudinary.com/${cloudName}/image/upload/${transformation}/${publicIdOrUrl}`;
 }
 
 export function getPlaceholderImage(width = 400, height = 400, text = 'Plant') {

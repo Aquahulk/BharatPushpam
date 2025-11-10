@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 
+function isAdmin(req: NextRequest) {
+  return req.cookies.get('admin_authenticated')?.value === 'true';
+}
+
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -22,7 +26,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = await req.json();
-    const { date, startMinutes, customerName, customerPhone, customerEmail, notes, status } = body || {};
+    const { date, startMinutes, customerName, customerPhone, customerEmail, notes, status, inspectionCompleted, serviceCompleted, type, planType, planPricePaise, monthlyDay } = body || {};
+
+    const admin = isAdmin(req);
+    // Block non-admin attempts to change booking status or inspection completion.
+    if (!admin && (status !== undefined || inspectionCompleted !== undefined || serviceCompleted !== undefined)) {
+      return NextResponse.json({ error: 'Not allowed to update status or inspection' }, { status: 403 });
+    }
 
   // Enforce reschedule only if more than 60 minutes remain before current start
   if (date || typeof startMinutes === 'number') {
@@ -54,7 +64,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (customerPhone) data.customerPhone = customerPhone;
     if (customerEmail !== undefined) data.customerEmail = customerEmail;
     if (notes !== undefined) data.notes = notes;
-    if (status && ['PENDING', 'CONFIRMED', 'CANCELLED'].includes(status)) data.status = status;
+    if (admin && status && ['PENDING', 'CONFIRMED', 'CANCELLED'].includes(status)) data.status = status;
+    if (admin && inspectionCompleted !== undefined) data.inspectionCompleted = !!inspectionCompleted;
+    if (admin && serviceCompleted !== undefined) data.serviceCompleted = !!serviceCompleted;
+    if (type && ['INSPECTION', 'MAINTENANCE'].includes(type)) data.type = type;
+    if (planType && ['NONE', 'PER_VISIT', 'MONTHLY'].includes(planType)) data.planType = planType;
+    if (typeof planPricePaise === 'number' && planPricePaise >= 0) data.planPricePaise = planPricePaise;
+    if (monthlyDay !== undefined) {
+      const md = Number(monthlyDay);
+      if (!isNaN(md) && md >= 1 && md <= 28) {
+        data.monthlyDay = md;
+      } else {
+        return NextResponse.json({ error: 'Please choose a monthly payment date between 1 and 28' }, { status: 400 });
+      }
+    }
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });

@@ -3,8 +3,14 @@ import { prisma } from '@/app/lib/prisma';
 import DeleteOrderButton from './DeleteOrderButton';
 import { formatINR, paiseToRupees } from '@/app/lib/currency';
 import { formatDateIST } from '@/app/lib/date';
+import AdminBookingActions from '../bookings/AdminBookingActions';
+import AdminBookingStatusDropdown from '../bookings/AdminBookingStatusDropdown';
+import AutoRefresh from './AutoRefresh';
 
-export default async function OrdersPage() {
+export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
+  const sp = await searchParams;
+  const qRaw = sp?.q;
+  const query = (Array.isArray(qRaw) ? qRaw[0] : qRaw)?.toString().trim().toLowerCase() || '';
   const orders = await prisma.order.findMany({
     include: {
       items: {
@@ -31,7 +37,18 @@ export default async function OrdersPage() {
   };
 
   // Show only product orders in this view; service bookings belong to the Bookings tab
-  const productOrders = orders.filter((o) => !isServiceOrder(o));
+  let productOrders = orders.filter((o) => !isServiceOrder(o));
+  if (query) {
+    productOrders = productOrders.filter((order) => {
+      const matchesCustomer = (order.customer || '').toLowerCase().includes(query);
+      const matchesItems = order.items.some((item) => {
+        const p = item.product?.name || '';
+        const v = item.variant?.name || '';
+        return p.toLowerCase().includes(query) || v.toLowerCase().includes(query);
+      });
+      return matchesCustomer || matchesItems;
+    });
+  }
 
   // Prefetch bookings mapped by paymentId for legacy orders that don't include bookingId in paymentDetails
   const servicePaymentIds = orders
@@ -43,7 +60,68 @@ export default async function OrdersPage() {
     select: { id: true, paymentId: true }
   });
   const bookingByPaymentId = Object.fromEntries(relatedBookings.map(b => [b.paymentId, b]));
+  
+  // Service orders mapped to bookings via bookingId embedded in paymentDetails
+  let serviceOrders = orders.filter((o) => isServiceOrder(o));
+  const bookingIds = serviceOrders.map(o => {
+    try {
+      const info = JSON.parse(o.paymentDetails as any);
+      return info?.bookingId || null;
+    } catch {}
+    return null;
+  }).filter(Boolean) as string[];
+  const serviceBookings = bookingIds.length > 0 ? await prisma.serviceBooking.findMany({
+    where: { id: { in: bookingIds } },
+    select: {
+      id: true,
+      notes: true,
+      monthlyDay: true,
+      type: true,
+      status: true,
+      planType: true,
+      planPricePaise: true,
+      service: { select: { name: true, slug: true } }
+    }
+  }) : [];
+  const bookingById: Record<string, any> = Object.fromEntries(serviceBookings.map(b => [b.id, b]));
 
+  function parseFirstPaymentDate(notes: string | null | undefined): string | null {
+    if (!notes) return null;
+    const m = notes.match(/firstPaymentDate\s*=\s*(\d{4}-\d{2}-\d{2})/i);
+    return m ? m[1] : null;
+  }
+
+  function nextPaymentInfo(monthlyDay: number | null | undefined) {
+    if (!monthlyDay || monthlyDay < 1 || monthlyDay > 28) return null;
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const [y, m, d] = todayStr.split('-').map(n => parseInt(n, 10));
+    const targetMonth = d > monthlyDay ? m + 1 : m;
+    const targetYear = targetMonth > 12 ? y + 1 : y;
+    const targetMonthClamped = ((targetMonth - 1) % 12 + 12) % 12; // 0-based
+    const targetDate = new Date(targetYear, targetMonthClamped, monthlyDay);
+    const nextYmd = `${targetYear}-${String(targetMonthClamped + 1).padStart(2, '0')}-${String(monthlyDay).padStart(2, '0')}`;
+    const start = new Date(y, m - 1, d);
+    const days = Math.round((targetDate.setHours(0,0,0,0) - start.setHours(0,0,0,0)) / (1000*60*60*24));
+    return { nextYmd, days };
+  }
+  if (query) {
+    serviceOrders = serviceOrders.filter((order) => {
+      let nameFromPayment: string | undefined;
+      let bookingId: string | null = null;
+      try {
+        const info = JSON.parse(order.paymentDetails as any);
+        nameFromPayment = info?.serviceName;
+        bookingId = info?.bookingId || null;
+      } catch {}
+      const matchesCustomer = (order.customer || '').toLowerCase().includes(query);
+      if (nameFromPayment && nameFromPayment.toLowerCase().includes(query)) return true;
+      const booking = bookingId ? bookingById[bookingId] : null;
+      const name = booking?.service?.name as string | undefined;
+      const matchesService = !!(name && name.toLowerCase().includes(query));
+      return matchesCustomer || matchesService;
+    });
+  }
+  
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'PAID':
@@ -76,6 +154,7 @@ export default async function OrdersPage() {
 
   return (
     <div className="space-y-6">
+      <AutoRefresh intervalMs={15000} />
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
@@ -97,6 +176,21 @@ export default async function OrdersPage() {
           </a>
         </div>
       </div>
+
+      {/* Search */}
+      <form action="/admin/orders" method="GET" className="flex items-center gap-2">
+        <input
+          type="text"
+          name="q"
+          defaultValue={query}
+          placeholder="Search customer, product or service"
+          className="w-full max-w-md border rounded px-3 py-2 text-sm"
+        />
+        <button type="submit" className="px-3 py-2 text-sm rounded bg-gray-800 text-white">Search</button>
+        {query && (
+          <a href="/admin/orders" className="text-sm text-blue-600 hover:underline">Clear</a>
+        )}
+      </form>
 
       {/* Top Tabs: Orders | Bookings */}
       <div className="border-b">
@@ -285,6 +379,106 @@ export default async function OrdersPage() {
           </table>
         </div>
       </div>
+
+      {/* Service Orders (for inspection/maintenance bookings) */}
+      {serviceOrders.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border overflow-hidden mt-6">
+          <div className="px-6 py-4 border-b bg-gray-50">
+            <h2 className="text-lg font-semibold text-gray-900">Service Orders</h2>
+            <p className="text-sm text-gray-600">Manage inspection and maintenance bookings directly from here.</p>
+          </div>
+          <div className="divide-y divide-gray-200">
+            {serviceOrders.map(order => {
+              let bookingId: string | null = null;
+              let info: any = null;
+              try {
+                info = JSON.parse(order.paymentDetails as any);
+                bookingId = info?.bookingId || null;
+              } catch {}
+              const booking = bookingId ? bookingById[bookingId] : null;
+              const statusBadge = booking ? (booking.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' : booking.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') : 'bg-gray-100 text-gray-700';
+              const hh = info?.startMinutes != null ? Math.floor(info.startMinutes / 60) : null;
+              const mm = info?.startMinutes != null ? String(info.startMinutes % 60).padStart(2, '0') : null;
+              return (
+                <div key={order.id} className="px-6 py-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">#{order.id.slice(-8)} • {(booking?.service?.name) || (info?.serviceName) || 'Service Booking'}</div>
+                      <div className="mt-1 text-sm text-gray-700">Date: {info?.date || '-'}</div>
+                      {hh !== null && mm !== null && (
+                        <div className="text-sm text-gray-700">Start: {hh}:{mm}</div>
+                      )}
+                      {booking && (
+                        <div className="mt-1 text-sm text-gray-700">Type: {booking.type}</div>
+                      )}
+                      {booking && (
+                        <div className="mt-1 text-sm text-gray-700">Plan: {booking.planType} {booking.planPricePaise ? `• ${formatINR(paiseToRupees(booking.planPricePaise))}` : ''}</div>
+                      )}
+                      {booking && booking.planType === 'MONTHLY' && (
+                        <div className="mt-2 text-sm text-gray-700">
+                          <div className="font-medium">Payment Schedule</div>
+                          {(() => {
+                            const fpd = parseFirstPaymentDate(booking.notes || '');
+                            const md = booking.monthlyDay ?? null;
+                            const info = nextPaymentInfo(md);
+                            if (!md) {
+                              return <div>Monthly day: Not scheduled yet</div>;
+                            }
+                            return (
+                              <div className="space-y-0.5">
+                                <div>Monthly day: {md}</div>
+                                {fpd && <div>First payment date: {fpd}</div>}
+                                {info && (
+                                  <div>Next payment: {info.nextYmd} {info.days === 0 ? '(today)' : info.days > 0 ? `(in ${info.days} day${info.days === 1 ? '' : 's'})` : ''}</div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs px-2 py-1 rounded ${statusBadge}`}>{booking?.status || order.status}</span>
+                      {booking?.type === 'INSPECTION' && order.totalPrice === 0 && (
+                        <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-800">Free Inspection</span>
+                      )}
+                      {/* Added explicit payment status chip for clarity */}
+                      <span className={`text-xs px-2 py-1 rounded ${getStatusColor(order.status)}`}>Payment: {order.status}</span>
+                      {bookingId && (
+                        <a href={`/admin/bookings/${bookingId}`} className="text-blue-600 hover:underline">View booking</a>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <div className="text-sm text-gray-700">Customer: {order.customer} • {order.phone} {order.email ? `• ${order.email}` : ''}</div>
+                    <div className="flex items-center gap-3">
+                      {booking && (
+                        booking.type === 'INSPECTION' ? (
+                          <AdminBookingStatusDropdown
+                            id={booking.id}
+                            status={booking.status as any}
+                            type={booking.type as any}
+                            inspectionCompleted={booking.inspectionCompleted}
+                            serviceCompleted={(booking as any).serviceCompleted}
+                            planType={booking.planType as any}
+                          />
+                        ) : (
+                          <AdminBookingActions id={booking.id} status={booking.status as any} type={booking.type as any} inspectionCompleted={booking.inspectionCompleted} serviceCompleted={(booking as any).serviceCompleted} hideDelete />
+                        )
+                      )}
+                      {/* Permanently delete the service order */}
+                      <DeleteOrderButton id={order.id} />
+                    </div>
+                  </div>
+                  {!booking && (
+                    <div className="mt-2 text-sm text-gray-600">Booking details not found. Use the Bookings tab.</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {productOrders.length === 0 && (
         <div className="text-center py-12">

@@ -36,7 +36,7 @@ export default async function AdminBookingsPage({ params }: { params: Promise<{ 
             <div className="text-sm text-gray-700">Address: {[b.addressLine1, b.addressLine2, b.city, b.state, b.postalCode].filter(Boolean).join(', ')}</div>
             <div className="flex items-center justify-between pt-2">
               <a className="text-blue-600 hover:underline" href={`${base}/bookings/${b.id}`}>View</a>
-              <AdminBookingActions id={b.id} status={b.status as any} />
+              <AdminBookingActions id={b.id} status={b.status as any} type={b.type as any} inspectionCompleted={b.inspectionCompleted} />
             </div>
           </div>
         ))}

@@ -18,7 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   const { slug } = await params;
   const body = await req.json();
   const { date, startMinutes, customerName, customerPhone, customerEmail, notes,
-    addressLine1, addressLine2, city, state, postalCode } = body || {};
+    addressLine1, addressLine2, city, state, postalCode, planType, planPricePaise, monthlyDay } = body || {};
 
   if (!date || typeof startMinutes !== 'number' || !customerName || !customerPhone) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -101,6 +101,48 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       return NextResponse.json({ error: 'Selected slot is full' }, { status: 409 });
     }
 
+    const isGardenService = service.slug === 'garden-services';
+    const isKitchenService = service.slug === 'kitchen-gardening';
+    const isPlantRental = service.slug === 'plants-on-rent';
+    const isPlantHostel = service.slug === 'plant-hostel-service';
+
+    // Kitchen Gardening: require valid plan selection and price
+    if (isKitchenService) {
+      const isValidPlan = planType === 'PER_VISIT' || planType === 'MONTHLY';
+      if (!isValidPlan || !planPricePaise || planPricePaise <= 0) {
+        return NextResponse.json({ error: 'Please select a valid plan and quantity for Kitchen Gardening' }, { status: 400 });
+      }
+      if (planType === 'MONTHLY') {
+        const md = Number(monthlyDay || 0);
+        if (!md || md < 1 || md > 28) {
+          return NextResponse.json({ error: 'Please choose a monthly payment date between 1 and 28' }, { status: 400 });
+        }
+      }
+    }
+
+    // Plants on Rent: require monthly plan and valid price (includes deposit)
+    if (isPlantRental) {
+      const isValidPlan = planType === 'MONTHLY';
+      if (!isValidPlan || !planPricePaise || planPricePaise <= 0) {
+        return NextResponse.json({ error: 'Please select plants and a valid rental plan' }, { status: 400 });
+      }
+      // Require monthly payment date for rentals
+      if (planType === 'MONTHLY') {
+        const md = Number(monthlyDay || 0);
+        if (!md || md < 1 || md > 28) {
+          return NextResponse.json({ error: 'Please choose a monthly payment date between 1 and 28' }, { status: 400 });
+        }
+      }
+    }
+
+    // Plant Hostel: per-visit (per-day) and valid price required
+    if (isPlantHostel) {
+      const isValidPlan = planType === 'PER_VISIT';
+      if (!isValidPlan || !planPricePaise || planPricePaise <= 0) {
+        return NextResponse.json({ error: 'Please enter valid hostel plants, days and charges' }, { status: 400 });
+      }
+    }
+
     const booking = await prisma.serviceBooking.create({
       data: {
         serviceId: service.id,
@@ -116,12 +158,56 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         state,
         postalCode,
         notes,
-        status: 'PENDING'
+        status: 'PENDING',
+        type: isGardenService ? 'INSPECTION' : 'MAINTENANCE',
+        inspectionCompleted: isGardenService ? false : false,
+        planType: isKitchenService ? (planType === 'MONTHLY' ? 'MONTHLY' : 'PER_VISIT') : (isPlantRental ? 'MONTHLY' : (isPlantHostel ? 'PER_VISIT' : 'NONE')),
+        planPricePaise: (isKitchenService || isPlantRental || isPlantHostel) ? (typeof planPricePaise === 'number' ? planPricePaise : 0) : 0,
+        monthlyDay: (planType === 'MONTHLY') ? Number(monthlyDay || 0) : null
       }
     });
-    // Redirect to payment checkout
+
+    // Create a pending Order entry so the booking appears in My Orders immediately
+    try {
+      const address = [addressLine1 || '', addressLine2 || ''].filter(Boolean).join(', ');
+      const amountPaise = isGardenService
+        ? 0
+        : (booking.planPricePaise && booking.planPricePaise > 0)
+          ? booking.planPricePaise
+          : Math.max(100, Math.floor((service.priceMin || 0) * 100));
+      await prisma.order.create({
+        data: {
+          id: booking.id,
+          customer: session?.name || customerName,
+          email: session?.email || customerEmail || undefined,
+          phone: customerPhone || undefined,
+          address,
+          city,
+          state: state || undefined,
+          pincode: postalCode,
+          totalMrp: amountPaise,
+          totalPrice: amountPaise,
+          shippingFee: 0,
+          status: 'PENDING' as any,
+          paymentMethod: 'Razorpay',
+          paymentDetails: JSON.stringify({
+            type: 'service',
+            serviceName: service.name,
+            date,
+            startMinutes,
+            bookingId: booking.id
+          })
+        }
+      });
+    } catch (orderErr) {
+      console.error('Failed to create pending order for booking:', orderErr);
+      // Do not fail booking if order creation fails
+    }
+
+    // Determine immediate payment requirement
     const paymentUrl = `/pay/booking/${booking.id}`;
-    return NextResponse.json({ success: true, booking, paymentUrl });
+    const requiresPayment = isKitchenService ? (booking.planType === 'PER_VISIT') : !isGardenService;
+    return NextResponse.json({ success: true, booking, paymentUrl, requiresPayment });
   } catch (error: any) {
     console.error('Error in booking endpoint:', error);
     return NextResponse.json({ error: 'Failed to process booking' }, { status: 500 });

@@ -21,8 +21,10 @@ async function main() {
     },
     {
       name: 'Kitchen Gardening',
-      description: 'Setup and guidance for growing fresh vegetables and herbs at home.',
-      priceMin: 799,
+      // Updated: tagline + description
+      description: 'Eat fresh, eat home-grown — bring your kitchen garden to life. We help you grow fresh, chemical-free vegetables and herbs right in your balcony, terrace, or backyard.',
+      // Updated: monthly maintenance starts at ₹300 per vegetable
+      priceMin: 300,
       imagePublicId: 'services/kitchen-gardening'
     },
     {
@@ -36,6 +38,12 @@ async function main() {
       description: 'We take care of your plants while you’re away and return them healthy.',
       priceMin: 599,
       imagePublicId: 'services/plant-hostel-service'
+    },
+    {
+      name: 'Landscape Design',
+      description: 'Custom garden and landscape design, plant selection, and installation.',
+      priceMin: 1499,
+      imagePublicId: 'services/landscape-design'
     }
   ];
 
